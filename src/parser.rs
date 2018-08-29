@@ -4,7 +4,8 @@ use Instruction::*;
 #[allow(dead_code)]
 pub fn compile(tokens: impl IntoIterator<Item = char>) -> Result<Vec<Instruction>, usize> {
     let mut insts: Vec<_> = parse(tokens).collect();
-    link_branches(&mut insts[..])?;
+    optimize(&mut insts);
+    link_branches(&mut insts)?;
     return Ok(insts);
 }
 
@@ -45,5 +46,63 @@ pub fn link_branches(insts: &mut [Instruction]) -> Result<(), usize> {
         Ok(())
     } else {
         Err(bracket_stack.pop().unwrap())
+    }
+}
+
+pub fn optimize(insts: &mut Vec<Instruction>) {
+    let mut old_len;
+    while {
+        old_len = insts.len();
+        merge_general(
+            insts,
+            |t| Move(t),
+            |m| if let Move(t) = m { Some(t) } else { None },
+        );
+        merge_general(
+            insts,
+            |t| Mutate(t),
+            |m| if let Mutate(t) = m { Some(t) } else { None },
+        );
+        find_resets(insts);
+        old_len != insts.len()
+    } {} // Horrible hack for do-while
+}
+
+fn find_resets(insts: &mut Vec<Instruction>) {
+	let mut i = 0; 
+	while i < insts.len()-2 {
+		if let (JumpIfZero(0), Mutate(-1), JumpIfNonZero(0)) = (insts[i], insts[i+1], insts[i+2]) {
+			insts[i] = Reset;
+			insts.drain(i+1..=i+2);
+		}
+		i += 1;
+	}
+}
+
+fn merge_general<C, D>(insts: &mut Vec<Instruction>, create: C, unwrap: D)
+where
+    C: Fn(isize) -> Instruction,
+    D: Fn(Instruction) -> Option<isize>,
+{
+    let mut c = insts.len() - 1;
+    while c < insts.len() {
+        if unwrap(insts[c]).is_some() {
+            let mut k = c;
+            let mut t = 0;
+            while k <= c {
+                if let Some(m) = unwrap(insts[k]) {
+                    t += m;
+                } else {
+                    break;
+                }
+                k = k.wrapping_sub(1);
+            }
+            k = k.wrapping_add(1);
+            insts[k] = create(t);
+            let start = if t == 0 { k } else { k + 1 };
+            insts.drain(start..=c);
+            c = k;
+        }
+        c = c.wrapping_sub(1);
     }
 }
