@@ -1,7 +1,7 @@
 #![feature(duration_as_u128)]
 
-use std::time;
 use std::io::Read;
+use std::time;
 
 mod interpreter;
 mod parser;
@@ -14,7 +14,10 @@ pub enum Instruction {
     Output,
     JumpIfZero(isize),
     JumpIfNonZero(isize),
+    Reset,
 }
+
+static ITERS : usize = 1;
 
 fn main() {
     let fname = std::env::args().skip(1).next();
@@ -28,12 +31,26 @@ fn main() {
                         .expect("Failed to read file somehow");
                     match parser::compile(src.chars()) {
                         Ok(prog) => {
-                            let mut runner = interpreter::Program::new(prog);
-                            let start = time::Instant::now();
-                            let c = runner.run(&mut std::io::stdin(), &mut std::io::stdout());
+                            
+                            println!("Got {:?} instructions", prog.len());
+                            let mut data :Vec<_> = (0..ITERS).map(|_| prog.clone()).collect();
+							let start = time::Instant::now();
+							let mut c = 0;
+							for i in 0..ITERS {
+								let a = std::mem::replace(&mut data[i], Vec::new());
+								let mut runner = interpreter::Program::new(a);
+                            	c += runner.run(&mut std::io::stdin(), &mut std::io::stdout());
+                            	//runner.print();
+                        	}
+                            //let c = 0;
                             let end = time::Instant::now();
                             let dur = end.duration_since(start);
-                            println!("Ran {:?} steps in {:?}, {:?} MIPS", c, dur, (c as f64/(dur.as_nanos() as f64)*1e3));
+                            println!(
+                                "Ran {:?} steps in {:?}, {:?} MIPS",
+                                c,
+                                dur,
+                                (c as f64 / (dur.as_nanos() as f64) * 1e3)
+                            );
                         }
                         Err(i) => {
                             println!("Parse error at index {:?}", i);
