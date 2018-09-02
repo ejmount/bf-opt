@@ -64,6 +64,7 @@ pub fn optimize(insts: &mut Vec<Instruction>) {
             |m| if let Mutate(t) = m { Some(t) } else { None },
         );
         find_resets(insts);
+        find_transfers(insts);
         old_len != insts.len()
     } {} // Horrible hack for do-while
 }
@@ -78,6 +79,24 @@ fn find_resets(insts: &mut Vec<Instruction>) {
 		i += 1;
 	}
 }
+
+fn find_transfers(insts: &mut Vec<Instruction>) {
+	let mut i = 0; 
+	while i < insts.len()-6 {
+		match insts[i..i+6] {
+			[JumpIfZero(_), Move(d), Mutate(s), Move(f), Mutate(-1), JumpIfNonZero(_)]
+			if d == -f => {
+			insts[i] = Transfer(d, s);
+			insts.drain(i+1..i+6);
+		}
+		_ => {}
+	}
+		i += 1;
+	}
+}
+
+
+
 
 fn merge_general<C, D>(insts: &mut Vec<Instruction>, create: C, unwrap: D)
 where

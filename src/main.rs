@@ -15,6 +15,7 @@ pub enum Instruction {
     JumpIfZero(isize),
     JumpIfNonZero(isize),
     Reset,
+    Transfer(isize, isize),
 }
 
 static ITERS : usize = 1;

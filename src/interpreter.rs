@@ -41,6 +41,19 @@ impl Program {
         }
     }
 
+    fn allocate_location(&mut self, signed_cursor : isize) -> usize {
+        if signed_cursor < 0 {
+            let mut expanded = Vec::with_capacity(self.data.len() * 2);
+            expanded.extend(repeat(0).take(self.data.len()));
+            expanded.extend(self.data.iter());
+            self.data = expanded;
+            return (self.data.len() as isize + signed_cursor) as usize;
+        } else if signed_cursor >= self.data.len() as isize {
+            self.data.resize(2 * signed_cursor as usize, 0);
+        }
+        return signed_cursor as usize;
+    }
+
 
     pub fn step(&mut self, r: &mut Read, w: &mut Write) {
         use Instruction::*;
@@ -58,16 +71,7 @@ impl Program {
             }
             Move(m) => {
                 let mut signed_cursor = self.cursor as isize + m;
-                if signed_cursor < 0 {
-                    let mut expanded = Vec::with_capacity(self.data.len() * 2);
-                    expanded.extend(repeat(0).take(self.data.len()));
-                    expanded.extend(self.data.iter());
-                    signed_cursor += self.data.len() as isize;
-                    self.data = expanded;
-                } else if signed_cursor >= self.data.len() as isize {
-                    self.data.resize(2 * signed_cursor as usize, 0);
-                }
-                self.cursor = signed_cursor as usize;
+                self.cursor = self.allocate_location(signed_cursor);
                 self.simulated_steps += m.abs() as usize - 1;
             }
             JumpIfZero(n) => {
@@ -89,8 +93,18 @@ impl Program {
                     .unwrap();*/
             }
             Reset => {
-                self.simulated_steps += (self.data[self.cursor] as usize) -1;
+                self.simulated_steps += self.data[self.cursor] as usize*3;
                 self.data[self.cursor] = 0;
+            }
+            Transfer(index, f) => {
+                let dest = self.cursor as isize + index;
+                let dest_in_bounds = self.allocate_location(dest);
+                let transfer_amount = self.data[self.cursor] as isize * f;
+                let rem = (transfer_amount % 256) as i8;
+                //println!("Trans to {:?}, {:?}, {:?}", dest_in_bounds, transfer_amount, rem);
+                self.data[dest_in_bounds] = (self.data[dest_in_bounds] as i8).wrapping_add(rem) as u8;
+                self.data[self.cursor] = 0;
+                self.simulated_steps += transfer_amount.abs() as usize*2;
             }
         }
         self.step_per_inst[self.prog_counter] += 1;
