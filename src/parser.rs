@@ -2,9 +2,14 @@ use Instruction;
 use Instruction::*;
 
 #[allow(dead_code)]
-pub fn compile(tokens: impl IntoIterator<Item = char>) -> Result<Vec<Instruction>, usize> {
+pub fn compile(
+    tokens: impl IntoIterator<Item = char>,
+    optimized: bool,
+) -> Result<Vec<Instruction>, usize> {
     let mut insts: Vec<_> = parse(tokens).collect();
-    optimize(&mut insts);
+    if optimized {
+        optimize(&mut insts);
+    }
     link_branches(&mut insts)?;
     return Ok(insts);
 }
@@ -70,33 +75,33 @@ pub fn optimize(insts: &mut Vec<Instruction>) {
 }
 
 fn find_resets(insts: &mut Vec<Instruction>) {
-	let mut i = 0; 
-	while i < insts.len()-2 {
-		if let (JumpIfZero(0), Mutate(-1), JumpIfNonZero(0)) = (insts[i], insts[i+1], insts[i+2]) {
-			insts[i] = Reset;
-			insts.drain(i+1..=i+2);
-		}
-		i += 1;
-	}
+    let mut i = 0;
+    while i < insts.len() - 2 {
+        if let (JumpIfZero(0), Mutate(-1), JumpIfNonZero(0)) =
+            (insts[i], insts[i + 1], insts[i + 2])
+        {
+            insts[i] = Reset;
+            insts.drain(i + 1..=i + 2);
+        }
+        i += 1;
+    }
 }
 
 fn find_transfers(insts: &mut Vec<Instruction>) {
-	let mut i = 0; 
-	while i < insts.len()-6 {
-		match insts[i..i+6] {
-			[JumpIfZero(_), Move(d), Mutate(s), Move(f), Mutate(-1), JumpIfNonZero(_)]
-			if d == -f => {
-			insts[i] = Transfer(d, s);
-			insts.drain(i+1..i+6);
-		}
-		_ => {}
-	}
-		i += 1;
-	}
+    let mut i = 0;
+    while i < insts.len() - 6 {
+        match insts[i..i + 6] {
+            [JumpIfZero(_), Move(d), Mutate(s), Move(f), Mutate(-1), JumpIfNonZero(_)]
+                if d == -f =>
+            {
+                insts[i] = Transfer(d, s);
+                insts.drain(i + 1..i + 6);
+            }
+            _ => {}
+        }
+        i += 1;
+    }
 }
-
-
-
 
 fn merge_general<C, D>(insts: &mut Vec<Instruction>, create: C, unwrap: D)
 where
