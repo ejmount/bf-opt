@@ -9,31 +9,31 @@ pub struct Program {
     program: Vec<Instruction>,
     step_per_inst: Vec<usize>,
     data: Vec<u8>,
-    simulated_steps: usize,
 }
 #[allow(dead_code)]
 impl Program {
     pub fn new(p: impl IntoIterator<Item = Instruction>) -> Program {
-        let p : Vec<_> = p.into_iter().collect();
+        let p: Vec<_> = p.into_iter().collect();
         Program {
             cursor: 0,
             prog_counter: 0,
-            step_per_inst: vec![0; p.len()+1],
+            step_per_inst: vec![0; p.len() + 1],
             program: p,
-            data: vec![0; 10240], 
-            simulated_steps: 0,
+            data: vec![0; 10240],
         }
     }
 
     pub fn print(&self) {
         let mut depth = 0;
 
-        for (index,i) in self.program.iter().enumerate() {
+        for (index, i) in self.program.iter().enumerate() {
             print!("{:05} ", self.step_per_inst[index]);
             if let Instruction::JumpIfNonZero(_) = i {
                 depth -= 1;
             }
-            for _ in 0..depth {print!("\t");}
+            for _ in 0..depth {
+                print!("\t");
+            }
             println!("{:?}", i);
             if let Instruction::JumpIfZero(_) = i {
                 depth += 1;
@@ -41,7 +41,7 @@ impl Program {
         }
     }
 
-    fn allocate_location(&mut self, signed_cursor : isize) -> usize {
+    fn allocate_location(&mut self, signed_cursor: isize) -> usize {
         if signed_cursor < 0 {
             let mut expanded = Vec::with_capacity(self.data.len() * 2);
             expanded.extend(repeat(0).take(self.data.len()));
@@ -54,25 +54,17 @@ impl Program {
         return signed_cursor as usize;
     }
 
-
     pub fn step(&mut self, r: &mut Read, w: &mut Write) {
         use Instruction::*;
-        let l = self.data.len();
-        let c = self.cursor;
         match self.program[self.prog_counter] {
             Mutate(m) => {
                 assert!(self.cursor < self.data.len());
-                let elt = self
-                    .data
-                    .get_mut(self.cursor)
-                    .unwrap_or_else(|| panic!("{:?} not allocated out of {:?}", c, l));
+                let mut elt = &mut self.data[self.cursor];
                 *elt = elt.wrapping_add(m as u8);
-                self.simulated_steps += m.abs() as usize - 1;
             }
             Move(m) => {
                 let mut signed_cursor = self.cursor as isize + m;
                 self.cursor = self.allocate_location(signed_cursor);
-                self.simulated_steps += m.abs() as usize - 1;
             }
             JumpIfZero(n) => {
                 if self.data[self.cursor] == 0 {
@@ -93,7 +85,6 @@ impl Program {
                     .unwrap();*/
             }
             Reset => {
-                self.simulated_steps += self.data[self.cursor] as usize*3;
                 self.data[self.cursor] = 0;
             }
             Transfer(index, f) => {
@@ -101,14 +92,12 @@ impl Program {
                 let dest_in_bounds = self.allocate_location(dest);
                 let transfer_amount = self.data[self.cursor] as isize * f;
                 let rem = (transfer_amount % 256) as i8;
-                //println!("Trans to {:?}, {:?}, {:?}", dest_in_bounds, transfer_amount, rem);
-                self.data[dest_in_bounds] = (self.data[dest_in_bounds] as i8).wrapping_add(rem) as u8;
+                self.data[dest_in_bounds] =
+                    (self.data[dest_in_bounds] as i8).wrapping_add(rem) as u8;
                 self.data[self.cursor] = 0;
-                self.simulated_steps += transfer_amount.abs() as usize*2;
             }
         }
         self.step_per_inst[self.prog_counter] += 1;
-        self.simulated_steps += 1;
         self.prog_counter += 1;
     }
 
@@ -116,6 +105,6 @@ impl Program {
         while self.prog_counter < self.program.len() {
             self.step(r, w);
         }
-        return self.simulated_steps;
+        return self.step_per_inst.iter().sum();
     }
 }
